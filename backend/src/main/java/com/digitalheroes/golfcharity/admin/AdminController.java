@@ -50,6 +50,11 @@ public class AdminController {
         adminService.markPaid(winnerId);
     }
 
+    @GetMapping("/analytics")
+    public AdminAnalyticsResponse analytics() {
+        return adminService.analytics();
+    }
+
     private UserSummaryResponse toResponse(User user) {
         return new UserSummaryResponse(
                 user.getId(),

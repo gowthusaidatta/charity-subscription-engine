@@ -32,6 +32,22 @@
    - `STRIPE_MONTHLY_PRICE_ID=<stripe_monthly_price_id>`
    - `STRIPE_YEARLY_PRICE_ID=<stripe_yearly_price_id>`
    - `STRIPE_WEBHOOK_SECRET=<stripe_webhook_signing_secret>`
+   - `MONTHLY_FEE=49.00`
+   - `YEARLY_FEE=499.00`
+   - `PRIZE_POOL_PERCENT=40.00`
+   - `PRIZE_TIER5_PERCENT=40.00`
+   - `PRIZE_TIER4_PERCENT=35.00`
+   - `PRIZE_TIER3_PERCENT=25.00`
+   - `DRAW_MONTHLY_CRON=0 0 1 1 * *`
+   - `DRAW_MONTHLY_MODE=RANDOM`
+   - `EMAIL_NOTIFICATIONS_ENABLED=true`
+   - `MAIL_FROM=<verified_sender_email>`
+   - `MAIL_HOST=<smtp_host>`
+   - `MAIL_PORT=587`
+   - `MAIL_USERNAME=<smtp_user>`
+   - `MAIL_PASSWORD=<smtp_password>`
+   - `MAIL_SMTP_AUTH=true`
+   - `MAIL_STARTTLS_ENABLE=true`
    - `ADMIN_EMAIL=<admin_email>`
    - `ADMIN_PASSWORD=<admin_password>`
 7. Deploy and verify:
@@ -73,6 +89,7 @@
 8. Use rolling deploy strategy for zero downtime.
 9. Use Stripe webhook signature verification before applying subscription state changes.
 10. Configure Stripe webhook endpoint to: `https://<render-app>/api/v1/subscriptions/stripe/webhook`.
+11. Verify scheduler timezone/cron behavior for monthly draw execution in production.
 
 ## 6. Public Accessibility Checklist
 

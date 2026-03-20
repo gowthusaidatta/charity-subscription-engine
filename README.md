@@ -97,8 +97,9 @@ On first startup, backend seeds:
 - Subscription: `/subscriptions/me`, `/subscriptions/activate`, `/subscriptions/checkout-session`
 - Charity: `/charities`, `/charities/select`
 - Draw: `/draws/latest`, `/draws/my-results`, `/draws/admin/execute`
+- Winner proof: `/winners/{winnerId}/proof`
 - Dashboard: `/dashboard/me`
-- Admin: `/admin/users`, `/admin/winners/{winnerId}/verify`, `/admin/winners/{winnerId}/pay`
+- Admin: `/admin/users`, `/admin/analytics`, `/admin/winners/{winnerId}/verify`, `/admin/winners/{winnerId}/pay`
 
 ## Notes
 
@@ -106,4 +107,7 @@ On first startup, backend seeds:
 - JWT auth is stateless with role-based route protection.
 - Flyway migrations run automatically from `backend/src/main/resources/db/migration`.
 - Stripe checkout session and webhook endpoint are implemented for subscription lifecycle sync.
+- Draw engine includes tiered pool distribution (40/35/25), equal winner split, and 5-match rollover.
+- Monthly auto-draw scheduler is configured via cron (`app.draw.monthly-cron`).
+- Email notification hooks are implemented for draw results, winner verification, and payout updates.
 - CORS enabled for frontend-backend integration.

@@ -20,6 +20,17 @@ spring:
   jackson:
     serialization:
       write-dates-as-timestamps: false
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${MAIL_STARTTLS_ENABLE:true}
 
 app:
   jwt:
@@ -30,6 +41,20 @@ app:
     monthly-price-id: ${STRIPE_MONTHLY_PRICE_ID:}
     yearly-price-id: ${STRIPE_YEARLY_PRICE_ID:}
     webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+  billing:
+    monthly-fee: ${MONTHLY_FEE:49.00}
+    yearly-fee: ${YEARLY_FEE:499.00}
+  prize:
+    pool-percent: ${PRIZE_POOL_PERCENT:40.00}
+    tier5-percent: ${PRIZE_TIER5_PERCENT:40.00}
+    tier4-percent: ${PRIZE_TIER4_PERCENT:35.00}
+    tier3-percent: ${PRIZE_TIER3_PERCENT:25.00}
+  draw:
+    monthly-cron: ${DRAW_MONTHLY_CRON:0 0 1 1 * *}
+    monthly-mode: ${DRAW_MONTHLY_MODE:RANDOM}
+  notifications:
+    email-enabled: ${EMAIL_NOTIFICATIONS_ENABLED:false}
+    from-email: ${MAIL_FROM:no-reply@golfcharity.local}
 
 management:
   endpoints:

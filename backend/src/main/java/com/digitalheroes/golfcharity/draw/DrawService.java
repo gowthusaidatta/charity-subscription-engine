@@ -3,18 +3,23 @@ package com.digitalheroes.golfcharity.draw;
 import com.digitalheroes.golfcharity.common.BadRequestException;
 import com.digitalheroes.golfcharity.common.ResourceNotFoundException;
 import com.digitalheroes.golfcharity.enums.DrawMode;
+import com.digitalheroes.golfcharity.enums.SubscriptionPlan;
 import com.digitalheroes.golfcharity.enums.SubscriptionStatus;
+import com.digitalheroes.golfcharity.notification.EmailNotificationService;
 import com.digitalheroes.golfcharity.score.Score;
 import com.digitalheroes.golfcharity.score.ScoreRepository;
 import com.digitalheroes.golfcharity.subscription.Subscription;
 import com.digitalheroes.golfcharity.subscription.SubscriptionRepository;
+import com.digitalheroes.golfcharity.user.User;
 import com.digitalheroes.golfcharity.winner.Winner;
 import com.digitalheroes.golfcharity.winner.WinnerRepository;
 import com.digitalheroes.golfcharity.winner.WinnerResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.*;
@@ -28,17 +33,38 @@ public class DrawService {
     private final SubscriptionRepository subscriptionRepository;
     private final ScoreRepository scoreRepository;
     private final WinnerRepository winnerRepository;
+    private final EmailNotificationService emailNotificationService;
+
+    @Value("${app.billing.monthly-fee}")
+    private BigDecimal monthlyFee;
+
+    @Value("${app.billing.yearly-fee}")
+    private BigDecimal yearlyFee;
+
+    @Value("${app.prize.pool-percent}")
+    private BigDecimal prizePoolPercent;
+
+    @Value("${app.prize.tier5-percent}")
+    private BigDecimal tier5Percent;
+
+    @Value("${app.prize.tier4-percent}")
+    private BigDecimal tier4Percent;
+
+    @Value("${app.prize.tier3-percent}")
+    private BigDecimal tier3Percent;
 
     public DrawService(
             DrawRepository drawRepository,
             SubscriptionRepository subscriptionRepository,
             ScoreRepository scoreRepository,
-            WinnerRepository winnerRepository
+            WinnerRepository winnerRepository,
+            EmailNotificationService emailNotificationService
     ) {
         this.drawRepository = drawRepository;
         this.subscriptionRepository = subscriptionRepository;
         this.scoreRepository = scoreRepository;
         this.winnerRepository = winnerRepository;
+        this.emailNotificationService = emailNotificationService;
     }
 
     @Transactional
@@ -47,23 +73,53 @@ public class DrawService {
                 ? YearMonth.now().toString()
                 : request.monthKey();
 
-        drawRepository.findByMonthKey(monthKey).ifPresent(existing -> {
-            throw new BadRequestException("Draw already exists for month: " + monthKey);
-        });
+        Optional<Draw> existingDrawOpt = drawRepository.findByMonthKey(monthKey);
+        if (existingDrawOpt.isPresent() && existingDrawOpt.get().isPublished()) {
+            throw new BadRequestException("Published draw already exists for month: " + monthKey);
+        }
 
         List<Integer> winningNumbers = generateWinningNumbers(request.mode());
+        List<Subscription> activeSubscriptions = subscriptionRepository.findByStatus(SubscriptionStatus.ACTIVE);
 
-        Draw draw = new Draw();
+        BigDecimal rolloverIn = drawRepository.findTopByPublishedTrueOrderByDrawDateDesc()
+            .map(Draw::getRolloverOutAmount)
+            .orElse(BigDecimal.ZERO);
+
+        BigDecimal basePool = activeSubscriptions.stream()
+            .map(this::monthlyEquivalentFee)
+            .map(this::poolContribution)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal totalCharityContribution = activeSubscriptions.stream()
+            .map(this::charityContribution)
+            .reduce(BigDecimal.ZERO, BigDecimal::add)
+            .setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal totalPool = basePool.add(rolloverIn).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal tier5Pool = percentage(totalPool, tier5Percent);
+        BigDecimal tier4Pool = percentage(totalPool, tier4Percent);
+        BigDecimal tier3Pool = percentage(totalPool, tier3Percent);
+
+        Draw draw = existingDrawOpt.orElseGet(Draw::new);
         draw.setMonthKey(monthKey);
         draw.setDrawDate(LocalDate.now());
         draw.setMode(request.mode());
         draw.setWinningNumbers(toCsv(winningNumbers));
         draw.setPublished(request.publish());
+        draw.setActiveSubscriberCount(activeSubscriptions.size());
+        draw.setTotalPoolAmount(totalPool);
+        draw.setTier5PoolAmount(tier5Pool);
+        draw.setTier4PoolAmount(tier4Pool);
+        draw.setTier3PoolAmount(tier3Pool);
+        draw.setRolloverInAmount(rolloverIn);
+        draw.setTotalCharityContributionAmount(totalCharityContribution);
+
         Draw savedDraw = drawRepository.save(draw);
+        winnerRepository.deleteByDrawId(savedDraw.getId());
 
-        List<Subscription> activeSubscriptions = subscriptionRepository.findByStatus(SubscriptionStatus.ACTIVE);
-
-        List<Winner> winners = new ArrayList<>();
+        List<User> tier3Users = new ArrayList<>();
+        List<User> tier4Users = new ArrayList<>();
+        List<User> tier5Users = new ArrayList<>();
         Set<Integer> winningSet = new HashSet<>(winningNumbers);
 
         for (Subscription subscription : activeSubscriptions) {
@@ -77,26 +133,51 @@ public class DrawService {
             long matches = userSet.stream().filter(winningSet::contains).count();
 
             if (matches >= 3) {
-                Winner winner = new Winner();
-                winner.setDraw(savedDraw);
-                winner.setUser(subscription.getUser());
-                winner.setMatchCount((int) matches);
-                winner.setPrizeAmount(prizeFor((int) matches));
-                winners.add(winner);
+                if (matches == 5) {
+                    tier5Users.add(subscription.getUser());
+                } else if (matches == 4) {
+                    tier4Users.add(subscription.getUser());
+                } else {
+                    tier3Users.add(subscription.getUser());
+                }
             }
         }
 
-        if (!winners.isEmpty()) {
-            winnerRepository.saveAll(winners);
+        BigDecimal tier3PrizePerWinner = splitPool(tier3Pool, tier3Users.size());
+        BigDecimal tier4PrizePerWinner = splitPool(tier4Pool, tier4Users.size());
+        BigDecimal tier5PrizePerWinner = splitPool(tier5Pool, tier5Users.size());
+
+        List<Winner> winners = new ArrayList<>();
+        winners.addAll(createWinners(savedDraw, tier3Users, 3, tier3PrizePerWinner));
+        winners.addAll(createWinners(savedDraw, tier4Users, 4, tier4PrizePerWinner));
+        winners.addAll(createWinners(savedDraw, tier5Users, 5, tier5PrizePerWinner));
+
+        winnerRepository.saveAll(winners);
+
+        if (request.publish()) {
+            savedDraw.setRolloverOutAmount(tier5Users.isEmpty() ? tier5Pool : BigDecimal.ZERO);
+        } else {
+            savedDraw.setRolloverOutAmount(BigDecimal.ZERO);
+        }
+        savedDraw = drawRepository.save(savedDraw);
+
+        if (request.publish() && !winners.isEmpty()) {
+            emailNotificationService.notifyDrawPublished(savedDraw.getMonthKey(), winners);
         }
 
-        return toDrawResponse(savedDraw);
+        return toDrawResponse(savedDraw, tier3Users.size(), tier4Users.size(), tier5Users.size());
     }
 
     public DrawResponse getLatestDraw() {
         Draw draw = drawRepository.findTopByOrderByDrawDateDesc()
                 .orElseThrow(() -> new ResourceNotFoundException("No draw found"));
-        return toDrawResponse(draw);
+        List<Winner> winners = winnerRepository.findByDrawId(draw.getId());
+        Map<Integer, Long> counts = winners.stream()
+            .collect(Collectors.groupingBy(Winner::getMatchCount, Collectors.counting()));
+        return toDrawResponse(draw,
+            counts.getOrDefault(3, 0L).intValue(),
+            counts.getOrDefault(4, 0L).intValue(),
+            counts.getOrDefault(5, 0L).intValue());
     }
 
     public List<WinnerResponse> getWinnersForDraw(UUID drawId) {
@@ -115,11 +196,7 @@ public class DrawService {
                 .toList();
     }
 
-    private DrawResponse toDrawResponse(Draw draw) {
-        List<Winner> winners = winnerRepository.findByDrawId(draw.getId());
-        Map<Integer, Long> counts = winners.stream()
-                .collect(Collectors.groupingBy(Winner::getMatchCount, Collectors.counting()));
-
+        private DrawResponse toDrawResponse(Draw draw, int winners3, int winners4, int winners5) {
         return new DrawResponse(
                 draw.getId(),
                 draw.getMonthKey(),
@@ -127,9 +204,17 @@ public class DrawService {
                 draw.getMode(),
                 fromCsv(draw.getWinningNumbers()),
                 draw.isPublished(),
-                counts.getOrDefault(3, 0L),
-                counts.getOrDefault(4, 0L),
-                counts.getOrDefault(5, 0L)
+            draw.getActiveSubscriberCount(),
+            draw.getTotalPoolAmount(),
+            draw.getTier5PoolAmount(),
+            draw.getTier4PoolAmount(),
+            draw.getTier3PoolAmount(),
+            draw.getRolloverInAmount(),
+            draw.getRolloverOutAmount(),
+            draw.getTotalCharityContributionAmount(),
+            winners3,
+            winners4,
+            winners5
         );
     }
 
@@ -213,12 +298,44 @@ public class DrawService {
         return result.stream().sorted().toList();
     }
 
-    private BigDecimal prizeFor(int matchCount) {
-        return switch (matchCount) {
-            case 5 -> BigDecimal.valueOf(1000);
-            case 4 -> BigDecimal.valueOf(300);
-            default -> BigDecimal.valueOf(100);
-        };
+    private BigDecimal monthlyEquivalentFee(Subscription subscription) {
+        if (subscription.getPlan() == SubscriptionPlan.YEARLY) {
+            return yearlyFee.divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
+        }
+        return monthlyFee;
+    }
+
+    private BigDecimal poolContribution(BigDecimal monthlyEquivalentFee) {
+        return percentage(monthlyEquivalentFee, prizePoolPercent);
+    }
+
+    private BigDecimal charityContribution(Subscription subscription) {
+        BigDecimal fee = monthlyEquivalentFee(subscription);
+        BigDecimal percentage = subscription.getUser().getCharityContributionPercent();
+        return percentage(fee, percentage);
+    }
+
+    private BigDecimal percentage(BigDecimal amount, BigDecimal percentage) {
+        return amount.multiply(percentage)
+                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal splitPool(BigDecimal pool, int winners) {
+        if (winners <= 0) {
+            return BigDecimal.ZERO;
+        }
+        return pool.divide(BigDecimal.valueOf(winners), 2, RoundingMode.HALF_UP);
+    }
+
+    private List<Winner> createWinners(Draw draw, List<User> users, int matchCount, BigDecimal prizeAmount) {
+        return users.stream().map(user -> {
+            Winner winner = new Winner();
+            winner.setDraw(draw);
+            winner.setUser(user);
+            winner.setMatchCount(matchCount);
+            winner.setPrizeAmount(prizeAmount);
+            return winner;
+        }).toList();
     }
 
     private String toCsv(List<Integer> numbers) {

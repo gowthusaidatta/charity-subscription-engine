@@ -110,15 +110,20 @@
 - `GET /api/v1/draws/my-results`
 - `POST /api/v1/draws/admin/execute` (admin)
 - `GET /api/v1/draws/admin/{drawId}/winners` (admin)
+- Monthly scheduled execution supported via cron (`app.draw.monthly-cron`)
 
 ## Dashboard
 - `GET /api/v1/dashboard/me`
 
 ## Admin Operations
 - `GET /api/v1/admin/users`
+- `GET /api/v1/admin/analytics`
 - `PUT /api/v1/admin/users/{userId}/subscription`
 - `PUT /api/v1/admin/winners/{winnerId}/verify`
 - `PUT /api/v1/admin/winners/{winnerId}/pay`
+
+## Winner Proof
+- `POST /api/v1/winners/{winnerId}/proof`
 
 ## 4. Folder Structure
 
@@ -189,4 +194,10 @@ docs/
   - RANDOM: random unique 5 numbers from 1 to 45
   - WEIGHTED: weighted by global score frequency
 - Match levels: 3, 4, 5
+- Tier pool distribution:
+  - 5 match: 40%
+  - 4 match: 35%
+  - 3 match: 25%
+- Winners within each tier split pool equally
+- Unclaimed 5-match pool rolls over to next published month
 - Winners stored with status tracking for verification and payment

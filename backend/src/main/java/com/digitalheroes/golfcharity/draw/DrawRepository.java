@@ -8,4 +8,5 @@ import java.util.UUID;
 public interface DrawRepository extends JpaRepository<Draw, UUID> {
     Optional<Draw> findByMonthKey(String monthKey);
     Optional<Draw> findTopByOrderByDrawDateDesc();
+    Optional<Draw> findTopByPublishedTrueOrderByDrawDateDesc();
 }

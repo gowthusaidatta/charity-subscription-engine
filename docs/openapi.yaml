@@ -93,6 +93,34 @@ paths:
       responses:
         '200':
           description: Score list
+  /winners/{winnerId}/proof:
+    post:
+      summary: Submit winner proof URL
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: winnerId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WinnerProofSubmitRequest'
+      responses:
+        '204':
+          description: Proof submitted
+  /admin/analytics:
+    get:
+      summary: Admin analytics summary
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Analytics payload
 components:
   securitySchemes:
     bearerAuth:
@@ -167,3 +195,9 @@ components:
         scoreDate:
           type: string
           format: date
+    WinnerProofSubmitRequest:
+      type: object
+      required: [proofUrl]
+      properties:
+        proofUrl:
+          type: string
