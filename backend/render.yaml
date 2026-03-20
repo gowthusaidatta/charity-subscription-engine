@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: golf-charity-backend
+    runtime: docker
+    rootDir: .
+    plan: free
+    autoDeploy: true

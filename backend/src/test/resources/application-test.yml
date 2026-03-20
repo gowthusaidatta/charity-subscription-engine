@@ -1,0 +1,27 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:golf_charity_test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: false
+
+app:
+  jwt:
+    secret: test-secret-key-test-secret-key-test-secret-key-test-secret-key
+    expiration-ms: 900000
+  stripe:
+    secret-key: sk_test_dummy
+    monthly-price-id: price_monthly_dummy
+    yearly-price-id: price_yearly_dummy
+    webhook-secret: whsec_dummy
+
+ADMIN_EMAIL: admin@golfcharity.com
+ADMIN_PASSWORD: Admin@12345

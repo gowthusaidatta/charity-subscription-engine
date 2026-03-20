@@ -1,0 +1,169 @@
+openapi: 3.0.3
+info:
+  title: Golf Charity Subscription Platform API
+  version: 1.0.0
+servers:
+  - url: https://api.example.com/api/v1
+    description: Production
+  - url: http://localhost:8080/api/v1
+    description: Local
+paths:
+  /auth/register:
+    post:
+      summary: Register user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+  /auth/login:
+    post:
+      summary: Login user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+  /subscriptions/checkout-session:
+    post:
+      summary: Create Stripe checkout session
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutSessionRequest'
+      responses:
+        '200':
+          description: Checkout URL generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutSessionResponse'
+  /subscriptions/activate:
+    post:
+      summary: Activate user subscription
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionActivateRequest'
+      responses:
+        '200':
+          description: Subscription activated
+  /scores:
+    post:
+      summary: Add score
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScoreRequest'
+      responses:
+        '200':
+          description: Score saved
+    get:
+      summary: Get latest 5 scores
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Score list
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [fullName, email, password]
+      properties:
+        fullName:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        fullName:
+          type: string
+    CheckoutSessionRequest:
+      type: object
+      required: [plan, successUrl, cancelUrl]
+      properties:
+        plan:
+          type: string
+          enum: [MONTHLY, YEARLY]
+        successUrl:
+          type: string
+        cancelUrl:
+          type: string
+    CheckoutSessionResponse:
+      type: object
+      properties:
+        checkoutUrl:
+          type: string
+        sessionId:
+          type: string
+    SubscriptionActivateRequest:
+      type: object
+      required: [plan]
+      properties:
+        plan:
+          type: string
+          enum: [MONTHLY, YEARLY]
+    ScoreRequest:
+      type: object
+      required: [scoreValue, scoreDate]
+      properties:
+        scoreValue:
+          type: integer
+          minimum: 1
+          maximum: 45
+        scoreDate:
+          type: string
+          format: date

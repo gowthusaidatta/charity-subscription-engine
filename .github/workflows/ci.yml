@@ -1,0 +1,84 @@
+name: Unified CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "docs/openapi.yaml"
+      - ".github/workflows/**"
+  pull_request:
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "docs/openapi.yaml"
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+jobs:
+  backend:
+    name: Backend Tests and Package
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - name: Run backend tests
+        run: mvn -B -ntp test
+
+      - name: Verify backend package
+        run: mvn -B -ntp -DskipTests package
+
+  frontend:
+    name: Frontend Tests and Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run frontend tests
+        run: npm run test
+
+      - name: Build frontend
+        run: npm run build
+
+  required-check:
+    name: Required CI Gate
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    if: ${{ always() }}
+    steps:
+      - name: Verify upstream jobs
+        run: |
+          if [ "${{ needs.backend.result }}" != "success" ] || [ "${{ needs.frontend.result }}" != "success" ]; then
+            echo "Backend result: ${{ needs.backend.result }}"
+            echo "Frontend result: ${{ needs.frontend.result }}"
+            exit 1
+          fi
+          echo "All required checks passed."
